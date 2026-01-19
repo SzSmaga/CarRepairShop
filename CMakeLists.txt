@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.18)
 project(CarRepairShop)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_STANDARD 11)
 
-add_executable(CarRepairShop main.cpp)
+
+add_executable(CarRepairShop
+        main.c
+        utility/clock.c
+)
+
+target_include_directories(CarRepairShop PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/utility
+)

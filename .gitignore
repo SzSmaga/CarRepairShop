@@ -1,2 +1,11 @@
-cmake-build-*/
+
 .idea/
+
+
+cmake-build-*/
+
+*.exe
+
+
+*.log
+*.tmp
