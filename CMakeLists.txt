@@ -7,6 +7,8 @@ set(CMAKE_C_STANDARD 11)
 add_executable(CarRepairShop
         main.c
         utility/clock.c
+        utility/logger.c
+        utility/logger.h
 )
 
 target_include_directories(CarRepairShop PRIVATE

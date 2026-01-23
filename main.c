@@ -1,20 +1,21 @@
 #include "clock.h"
-
+#include "logger.h"
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <errno.h>
-
+#include <sys/wait.h>
+#include <stdlib.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
 
 static volatile sig_atomic_t g_stop = 0;
-
 
 static void handle_sigint(int sig)
 {
     (void)sig;
     g_stop = 1;
 }
-
 
 static int setup_ctrl_c_handler(void)
 {
@@ -41,41 +42,75 @@ static const char* parse_state_file(int argc, char **argv)
     return "clock.state";
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     const char *state_file = parse_state_file(argc, argv);
     sim_clock_t clk;
 
-    if (setup_ctrl_c_handler() != 0) {
+
+    key_t log_key = ftok(argv[0], LOGGER_PROJECT_ID);
+    if (log_key == -1) {
+        perror("Main: ftok failed");
         return 1;
     }
 
-    /* Wznowienie lub start */
-    if (clock_load(&clk, state_file) != 0) {
-        if (errno == ENOENT) {
-            fprintf(stderr, "main: no state file '%s', starting from 0\n", state_file);
-        } else {
-            fprintf(stderr, "main: failed to load '%s', starting from 0\n", state_file);
-        }
-        clock_init(&clk, 0);
+
+    int msgid = msgget(log_key, 0666 | IPC_CREAT);
+    if (msgid == -1) {
+        perror("Main: msgget failed");
+        return 1;
     }
 
-    unsigned long long tick_count = 0;
 
-    while (!g_stop && !clk.shutdown) {
-        sleep_tick();
+    pid_t logger_pid = fork();
+    if (logger_pid == 0) {
+
+        run_logger(log_key);
+        exit(0);
+    } else if (logger_pid < 0) {
+        perror("Main: fork failed");
+        msgctl(msgid, IPC_RMID, NULL);
+        return 1;
+    }
+
+
+
+
+    if (setup_ctrl_c_handler() != 0) return 1;
+
+
+    if (clock_load(&clk, state_file) != 0) {
+        clock_init(&clk, T_p);
+    }
+
+    log_event(log_key, "SYSTEM", "Symulacja uruchomiona (Main)", (int)clk.sim_minutes);
+
+
+    while (!g_stop) {
         clock_tick(&clk);
 
-        tick_count++;
 
-        if (tick_count % 50 == 0) {
-            clock_save(&clk, state_file);
+        if (clk.sim_minutes % 60 == 0) {
+            log_event(log_key, "ZEGAR", "Minęła kolejna godzina", (int)clk.sim_minutes);
         }
+
+
+
+        sleep_tick();
     }
 
-    clock_save(&clk, state_file);
-    fprintf(stderr, "main: exiting at sim_minutes=%llu\n",
-            (unsigned long long)clk.sim_minutes);
 
+    log_event(log_key, "SYSTEM", "Otrzymano sygnał stopu. Zamykanie...", (int)clk.sim_minutes);
+
+
+    clock_save(&clk, state_file);
+
+
+    if (msgctl(msgid, IPC_RMID, NULL) == -1) {
+        perror("Main: msgctl IPC_RMID failed");
+    }
+
+    waitpid(logger_pid, NULL, 0);
+
+    printf("Symulacja zakończona poprawnie. Stan zapisany w %s\n", state_file);
     return 0;
 }
