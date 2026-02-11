@@ -9,6 +9,11 @@ add_executable(CarRepairShop
         utility/clock.c
         utility/logger.c
         utility/logger.h
+        utility/config.h
+        utility/driver.h
+        utility/frontdesk.h
+        utility/menager.h
+        utility/config.c
 )
 
 target_include_directories(CarRepairShop PRIVATE
